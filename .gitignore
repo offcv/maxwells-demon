@@ -71,3 +71,7 @@ ops/
 
 # 隐藏内部工程架构文档
 README_ENGINEERING.md
+
+# 屏蔽特定私有脚本和临时文件
+"engineering/scripts/启动 Opencode.command"
+search.py
