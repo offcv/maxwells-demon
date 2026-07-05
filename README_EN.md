@@ -52,7 +52,7 @@ This is the fastest way to deploy Maxwell's Demon on a Synology NAS or any Linux
 Clone this repository to your server:
 
 ```bash
-git clone https://github.com/yourusername/maxwells-demon.git
+git clone https://github.com/offcv/maxwells-demon.git
 cd maxwells-demon/engineering
 ```
 

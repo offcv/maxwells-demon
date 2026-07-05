@@ -52,7 +52,7 @@
 克隆本仓库到你的服务器：
 
 ```bash
-git clone https://github.com/yourusername/maxwells-demon.git
+git clone https://github.com/offcv/maxwells-demon.git
 cd maxwells-demon/engineering
 ```
 
