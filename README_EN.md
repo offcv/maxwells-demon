@@ -7,9 +7,6 @@ English | [简体中文](README.md)
 
 **Maxwell's Demon** is a professional **duplicate file scanning and cleanup tool**. It completely subverts the "mental burden" and "fear of file loss" brought by traditional duplicate file cleaners.
 
-> **⚠️ Compatibility Note:**
-> The underlying architecture is designed to be compatible with Linux (Docker), macOS, and Windows. However, it has currently **only been fully tested manually on Synology NAS (Docker) and macOS (Local)**. It is highly optimized for NAS hardware. Regular users are strongly recommended to use Docker for deployment. Windows users are welcome to deploy and provide feedback!
-
 ---
 
 ## ✨ Why Choose Maxwell's Demon? (Solving Core Pain Points)
@@ -90,6 +87,9 @@ Once started, open your browser and visit `http://YOUR_SERVER_IP:3080` to start 
 ## 💻 Local Development & Native Execution
 
 If you wish to deploy natively on macOS/Windows or participate in secondary development, this project uses a frontend-backend separation architecture (Vue/React + FastAPI).
+
+> **⚠️ Compatibility Note:**
+> The underlying architecture is designed to be compatible with Linux (Docker), macOS, and Windows. However, it has currently **only been fully tested manually on Synology NAS (Docker) and macOS (Local)**. It is highly optimized for NAS hardware. Regular users are strongly recommended to use Docker for deployment. Windows users are welcome to deploy and provide feedback!
 
 ---
 
