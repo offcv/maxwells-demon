@@ -679,8 +679,23 @@ npx vitest run --coverage
 | **场景** | 扫描完成后重新加载结果 |
 | **前置条件** | 扫描已完成 |
 | **操作步骤** | GET `/api/sessions` → GET `/api/sessions/{id}` |
-| **预期结果** | 正确列出所有会话，加载指定会话的详情 |
+| **预期结果** | 正确列出所有会话，加载指定会话的详情；统计字段（组数/文件数/大小/可释放）按有效重复组实时计算 |
 | **实现状态** | ✅ `test_list_sessions` / `test_get_session_detail` (`test_results_api.py`) |
+
+### 11.2a API-02a：动态统计口径（新增）
+
+清理操作删除 `scan_files` 记录后，列表/详情/summary 的统计随现状收缩，与「清理方案分类页」一致；未清理时与扫描写入的静态值相等（零跳变）。
+
+| 用例 | 预期 | 实现状态 |
+|------|------|----------|
+| summary 按有效组实时计算（2 组/5 文件/7000/4000） | 数字为动态真值而非静态快照 | ✅ `test_get_summary` |
+| 清理使组成为孤儿（3 文件组移走 2 个）后 | summary 收缩为 1 组/2 文件/4000/2000；`scanned_total` 不变 | ✅ `test_summary_reflects_cleanup` |
+| 列表端点统计与 summary 一致 | 列表项四个统计字段 == summary 值 | ✅ `test_sessions_list_dynamic_stats` |
+| 详情端点统计动态化且其余字段完整 | 统计动态、`scanned_total`/耗时/时间戳保持静态 | ✅ `test_session_detail_dynamic_stats` |
+| 无文件记录的会话 | 统计全 0，不报错 | ✅ `test_summary_empty_session_stats_zero` |
+| 组列表不返回孤儿组（组内剩 1 文件） | 仅返回仍有效的组 | ✅ `test_groups_excludes_orphan_groups` |
+| 零跳变锁定：未清理时动态 == 静态 | 刚扫描完列表数字与扫描结果页一致 | ✅ `test_dynamic_stats_equal_static_when_no_cleanup` |
+| 同一目录多个有效组（每组 2 文件） | 树返回该目录，n_groups=2、n_files=4 | ✅ `test_multiple_groups_in_one_dir` (`test_folder_tree.py`) |
 
 ### 11.3 API-03：文件夹标记
 

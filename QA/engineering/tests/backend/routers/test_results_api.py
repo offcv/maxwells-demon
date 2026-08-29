@@ -41,19 +41,127 @@ class TestResultsAPI:
         assert resp.json() is None
 
     # ── 会话摘要 ──
-    def test_get_summary(self, client, test_session):
-        """GET /api/sessions/{id}/summary → 统计数据"""
+    def test_get_summary(self, client, test_session, test_scan_files_group1, test_scan_files_group2):
+        """GET /api/sessions/{id}/summary → 统计数据（按有效重复组实时计算）
+
+        动态口径：group1(3 文件 x 1000) + group2(2 文件 x 2000)
+        → 2 组 / 5 文件 / 总 7000 / 可释放 4000（每组保留一份）。
+        scanned_total 为扫描时的历史事实，保持静态值。
+        """
         resp = client.get(f"/api/sessions/{test_session.id}/summary")
         assert resp.status_code == 200
         data = resp.json()
         assert data["scanned_total"] == 10
         assert data["group_count"] == 2
-        assert data["file_count"] == 6
+        assert data["file_count"] == 5
+        assert data["total_size"] == 7000
+        assert data["reclaimable_size"] == 4000
 
     def test_get_summary_not_found(self, client):
         """不存在的会话摘要 → 404"""
         resp = client.get(f"/api/sessions/{uuid.uuid4()}/summary")
         assert resp.status_code == 404
+
+    # ── 动态统计口径（清理后数字自动更新）──
+
+    def _cleanup_group1_partial(self, db_session, test_session):
+        """模拟清理：将 group1 的 3 个文件移走 2 个（组剩 1 个成为孤儿）"""
+        g1_files = db_session.query(ScanFile).filter(
+            ScanFile.session_id == test_session.id, ScanFile.group_id == 1
+        ).all()
+        assert len(g1_files) == 3
+        for f in g1_files[:2]:
+            db_session.delete(f)
+        db_session.commit()
+
+    def test_summary_reflects_cleanup(self, client, db_session, test_session, test_scan_files_group1, test_scan_files_group2):
+        """清理使组成为孤儿后，summary 不再统计该组（数字随清理收缩）"""
+        self._cleanup_group1_partial(db_session, test_session)
+
+        resp = client.get(f"/api/sessions/{test_session.id}/summary")
+        data = resp.json()
+        # 仅剩 group2（2 文件 x 2000）为有效组
+        assert data["group_count"] == 1
+        assert data["file_count"] == 2
+        assert data["total_size"] == 4000
+        assert data["reclaimable_size"] == 2000
+        # 历史事实字段不受清理影响
+        assert data["scanned_total"] == 10
+
+    def test_sessions_list_dynamic_stats(self, client, db_session, test_session, test_scan_files_group1, test_scan_files_group2):
+        """列表端点统计与 summary 一致（清理后同步收缩，不再显示老数字）"""
+        self._cleanup_group1_partial(db_session, test_session)
+
+        resp = client.get("/api/sessions/")
+        target = next(s for s in resp.json() if s["id"] == test_session.id)
+        assert target["group_count"] == 1
+        assert target["file_count"] == 2
+        assert target["total_size"] == 4000
+        assert target["reclaimable_size"] == 2000
+
+    def test_session_detail_dynamic_stats(self, client, test_session, test_scan_files_group1, test_scan_files_group2):
+        """详情端点统计动态化，且其余字段完整保留"""
+        resp = client.get(f"/api/sessions/{test_session.id}")
+        data = resp.json()
+        assert data["group_count"] == 2
+        assert data["file_count"] == 5
+        assert data["reclaimable_size"] == 4000
+        # 历史事实字段保持静态原样
+        assert data["scanned_total"] == 10
+        assert data["scan_duration_sec"] == 1.5
+        assert data["created_at"] is not None
+        assert data["scan_paths"] is not None
+
+    def test_summary_empty_session_stats_zero(self, client, test_session):
+        """无文件记录的会话统计为全 0（不报错）"""
+        resp = client.get(f"/api/sessions/{test_session.id}/summary")
+        data = resp.json()
+        assert data["group_count"] == 0
+        assert data["file_count"] == 0
+        assert data["total_size"] == 0
+        assert data["reclaimable_size"] == 0
+
+    def test_groups_excludes_orphan_groups(self, client, db_session, test_session, test_scan_files_group1, test_scan_files_group2):
+        """组列表不返回只剩 1 个文件的孤儿组"""
+        self._cleanup_group1_partial(db_session, test_session)
+
+        resp = client.get(f"/api/sessions/{test_session.id}/groups?page=1&page_size=10")
+        data = resp.json()["data"]
+        assert [g["group_id"] for g in data] == [2]
+
+    def test_dynamic_stats_equal_static_when_no_cleanup(self, client, db_session):
+        """零跳变锁定：未清理时动态统计与扫描写入的静态值必然相等
+
+        模拟真实扫描写入（静态字段按实际文件数据计算）：
+        group1: 3x1000 + group2: 2x2000 → 2 组 / 5 文件 / 7000 / 4000。
+        保证用户刚扫描完看列表时数字与扫描结果页一致。
+        """
+        session = ScanSession(
+            id=f"sess-static-{uuid.uuid4().hex[:8]}",
+            scan_paths=json.dumps([{"path": "/test", "is_exclude": False}]),
+            status="done",
+            scanned_total=10,
+            file_count=5,
+            group_count=2,
+            total_size=7000,
+            reclaimable_size=4000,
+        )
+        db_session.add(session)
+        db_session.add_all([
+            ScanFile(session_id=session.id, path="/test/photos/photo_a.jpg", size=1000, sha256="aaa", group_id=1),
+            ScanFile(session_id=session.id, path="/test/backup/photo_a.jpg", size=1000, sha256="aaa", group_id=1),
+            ScanFile(session_id=session.id, path="/test/tmp/photo_a.jpg", size=1000, sha256="aaa", group_id=1),
+            ScanFile(session_id=session.id, path="/test/docs/report_v1.pdf", size=2000, sha256="bbb", group_id=2),
+            ScanFile(session_id=session.id, path="/test/docs/report_v2.pdf", size=2000, sha256="bbb", group_id=2),
+        ])
+        db_session.commit()
+
+        resp = client.get(f"/api/sessions/{session.id}/summary")
+        data = resp.json()
+        assert data["group_count"] == session.group_count == 2
+        assert data["file_count"] == session.file_count == 5
+        assert data["total_size"] == session.total_size == 7000
+        assert data["reclaimable_size"] == session.reclaimable_size == 4000
 
     # ── 文件列表分页 ──
     def test_get_files_pagination(self, client, test_session, test_scan_files_group1):

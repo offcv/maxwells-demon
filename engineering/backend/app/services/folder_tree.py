@@ -1,15 +1,30 @@
 import os
 import json
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.models import ScanFile, ScanSession
 
 def get_folder_tree(db: Session, session_id: str, parent: str):
     # This needs to return direct child directories of `parent`
     # and their stats (N files, N groups) based on `ScanFile` table.
     
-    # 1. Fetch all file paths for this session
-    # In a real large DB, we'd use SQL aggregation, but for simplicity we'll fetch paths.
-    files = db.query(ScanFile.path, ScanFile.group_id).filter(ScanFile.session_id == session_id).all()
+    # 1. Fetch only files belonging to valid duplicate groups (group size >= 2)
+    #    Filter out orphan files that no longer have duplicates after cleanup actions.
+    valid_group_subquery = (
+        db.query(ScanFile.group_id)
+        .filter(ScanFile.session_id == session_id)
+        .group_by(ScanFile.group_id)
+        .having(func.count(ScanFile.id) >= 2)
+        .subquery()
+    )
+    files = (
+        db.query(ScanFile.path, ScanFile.group_id)
+        .filter(
+            ScanFile.session_id == session_id,
+            ScanFile.group_id.in_(valid_group_subquery)
+        )
+        .all()
+    )
     
     if parent == "roots":
         session = db.query(ScanSession).filter(ScanSession.id == session_id).first()

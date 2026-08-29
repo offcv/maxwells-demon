@@ -71,17 +71,26 @@ class TestFolderTree:
         assert result == []
 
     def test_multiple_groups_in_one_dir(self, db_session, test_session):
-        """同一目录涉及多个重复组"""
+        """同一目录涉及多个重复组（每组 2 个文件，构成有效重复组）"""
         from app.models import ScanFile
 
         files = [
             # 文件位于 /multi/subdir/ 下，这样 subdir 是 /multi 的直接子目录
+            # 真实扫描中单人组不会入库，故每组补足第 2 个副本以构成有效组
             ScanFile(
                 session_id=test_session.id, path="/multi/subdir/group_a.txt",
                 size=100, sha256="s1", group_id=1,
             ),
             ScanFile(
+                session_id=test_session.id, path="/multi/subdir/group_a2.txt",
+                size=100, sha256="s1", group_id=1,
+            ),
+            ScanFile(
                 session_id=test_session.id, path="/multi/subdir/group_b.txt",
+                size=200, sha256="s2", group_id=2,
+            ),
+            ScanFile(
+                session_id=test_session.id, path="/multi/subdir/group_b2.txt",
                 size=200, sha256="s2", group_id=2,
             ),
         ]
@@ -92,4 +101,4 @@ class TestFolderTree:
         assert len(result) == 1  # 应返回 subdir
         assert result[0]["name"] == "subdir"
         assert result[0]["n_groups"] == 2  # 两个组
-        assert result[0]["n_files"] == 2  # 两个文件
+        assert result[0]["n_files"] == 4  # 四个文件
