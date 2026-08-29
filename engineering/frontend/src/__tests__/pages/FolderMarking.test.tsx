@@ -174,7 +174,8 @@ describe('FolderMarking 页面 (FE-UI-04)', () => {
 
   it('没有 sessionId 时应重定向到首页', async () => {
     // 临时覆盖 sessionId 为 null
-    vi.mocked((await import('../../store/scanStore')).useScanStore).mockImplementation((selector?: any) => {
+    const scanStoreModule = await import('../../store/scanStore');
+    vi.mocked(scanStoreModule.useScanStore).mockImplementation((selector?: any) => {
       const state = { sessionId: null };
       return selector ? selector(state) : state;
     });
@@ -183,5 +184,30 @@ describe('FolderMarking 页面 (FE-UI-04)', () => {
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/');
     });
+    // 恢复默认实现，避免污染后续用例（sessionId 回到 test-session）
+    vi.mocked(scanStoreModule.useScanStore).mockImplementation((selector?: any) => {
+      const state = { sessionId: 'test-session' };
+      return selector ? selector(state) : state;
+    });
+  });
+
+  // ── 空态与失败态（清理完成后目录树为空，不应永远显示"正在加载"）──
+
+  it('目录树为空时应显示空态提示而非"正在加载目录"', async () => {
+    mockGetFolderTree.mockResolvedValue({ data: [] });
+    await renderPage();
+    await waitFor(() => {
+      expect(screen.getByText(/没有可标记的目录/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText('正在加载目录...')).not.toBeInTheDocument();
+  });
+
+  it('目录树请求失败时应显示失败提示而非永远加载', async () => {
+    mockGetFolderTree.mockRejectedValue(new Error('network error'));
+    await renderPage();
+    await waitFor(() => {
+      expect(screen.getByText(/目录加载失败/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText('正在加载目录...')).not.toBeInTheDocument();
   });
 });

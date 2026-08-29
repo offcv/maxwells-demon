@@ -200,13 +200,25 @@ export default function FolderMarking() {
   const sessionId = useScanStore(state => state.sessionId);
   const { setMarks } = useMarkStore();
   const [roots, setRoots] = useState<any[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const loadData = useCallback(() => {
     if (!sessionId) return;
+    setLoaded(false);
+    setLoadError(false);
     getFolderMarks(sessionId).then(res => {
       setMarks(res.data || {});
+    }).catch(() => {
+      // 标记加载失败不阻塞目录树展示
     });
-    getFolderTree(sessionId, 'roots').then(res => setRoots(res.data || []));
+    getFolderTree(sessionId, 'roots').then(res => {
+      setRoots(res.data || []);
+      setLoaded(true);
+    }).catch(() => {
+      setLoadError(true);
+      setLoaded(true);
+    });
   }, [sessionId, setMarks]);
 
   useEffect(() => {
@@ -381,8 +393,12 @@ export default function FolderMarking() {
 
           {/* Tree content */}
           <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {roots.length === 0 ? (
+            {!loaded ? (
               <div style={{ padding: 32, textAlign: 'center', color: '#8E8E93' }}>正在加载目录...</div>
+            ) : loadError ? (
+              <div style={{ padding: 32, textAlign: 'center', color: '#8E8E93' }}>目录加载失败，请确认后端服务已启动，然后刷新页面重试。</div>
+            ) : roots.length === 0 ? (
+              <div style={{ padding: 32, textAlign: 'center', color: '#8E8E93' }}>没有可标记的目录，当前扫描的重复文件已全部处理完毕。</div>
             ) : (
               roots.map(r => (
                 <TreeNode key={r.path} node={r} sessionId={sessionId as string} level={0} />
