@@ -11,6 +11,7 @@ export default function MovingComplete() {
   const total = state?.total ?? 1;
   const failed = state?.failed ?? 0;
   const size = state?.size ?? 0;
+  const emptiedDirs = state?.emptiedDirs ?? 0;
 
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return bytes + ' B';
@@ -89,6 +90,12 @@ export default function MovingComplete() {
               <span style={{ color: '#8E8E93', fontSize: 15 }}>移动失败</span>
               <span style={{ color: '#8E8E93', fontSize: 15, fontWeight: 600 }}>
                 {failed} 个文件
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: '#8E8E93', fontSize: 15 }}>已清理空文件夹</span>
+              <span style={{ color: '#8E8E93', fontSize: 15, fontWeight: 600 }}>
+                {emptiedDirs} 个
               </span>
             </div>
           </div>

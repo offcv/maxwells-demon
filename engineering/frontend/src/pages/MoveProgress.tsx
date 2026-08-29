@@ -30,6 +30,8 @@ export default function MoveProgress() {
   const [total, setTotal] = useState(1);
   const [cancelling, setCancelling] = useState(false);
   const completedRef = useRef(false);
+  const [cleaningDirs, setCleaningDirs] = useState(false);
+  const [emptiedDirs, setEmptiedDirs] = useState(0);
   const [dialog, setDialog] = useState<DialogConfig>({ isOpen: false, type: 'alert', title: '', message: '' });
 
   const closeDialog = () => setDialog(prev => ({ ...prev, isOpen: false }));
@@ -85,7 +87,8 @@ export default function MoveProgress() {
               done: data.done || 0,
               total: data.total || 1,
               failed: data.failed || 0,
-              size: data.total_size || 0
+              size: data.total_size || 0,
+              emptiedDirs: data.emptied_dirs || 0
             }
           });
         }
@@ -100,6 +103,12 @@ export default function MoveProgress() {
 
     ws.onmessage = (e) => {
       const data = JSON.parse(e.data);
+      // 空文件夹清理阶段消息：不含 done/total，须先于通用字段更新处理，避免进度被重置
+      if (data.phase === 'cleaning_empty_dirs') {
+        setCleaningDirs(true);
+        setEmptiedDirs(data.emptied_dirs || 0);
+        return;
+      }
       setActionType(data.action || 'move_to_folder');
       setDone(data.done || 0);
       setTotal(data.total || 1);
@@ -113,7 +122,9 @@ export default function MoveProgress() {
         navigate('/');
         return;
       }
-      if (data.status === 'done' || (data.done >= data.total && data.total > 0)) {
+      // 仅在收到最终 done 消息时跳转（文件移完≠全部结束，之后还有空文件夹清理阶段；
+      // WS 消息丢失时由上方 1 秒轮询 status 兜底跳转）
+      if (data.status === 'done') {
         completedRef.current = true;
         ws.close();
         if (pollInterval) clearInterval(pollInterval);
@@ -123,7 +134,8 @@ export default function MoveProgress() {
             done: data.done || 0,
             total: data.total || 1,
             failed: data.failed || 0,
-            size: data.total_size || 0
+            size: data.total_size || 0,
+            emptiedDirs: data.emptied_dirs || 0
           }
         });
       }
@@ -244,6 +256,16 @@ export default function MoveProgress() {
             ))
           )}
         </div>
+
+        {/* 空文件夹清理阶段提示 */}
+        {cleaningDirs && (
+          <div style={{ width: '100%', maxWidth: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Loader2 size={14} color="#8E8E93" style={{ animation: 'spin 1s linear infinite' }} />
+            <span style={{ fontSize: 14, color: '#8E8E93' }}>
+              正在清理空文件夹…（已清理 {emptiedDirs} 个）
+            </span>
+          </div>
+        )}
       </main>
       <style>{`
         @keyframes spin {

@@ -124,7 +124,7 @@ describe('MoveProgress 页面 (FE-UI-06)', () => {
     });
   });
 
-  it('应在完成时导航到 /moving-complete', async () => {
+  it('应在收到 status=done 的完成消息时导航到 /moving-complete', async () => {
     await renderPage();
     const wsInstance = mockWsInstances[mockWsInstances.length - 1];
     if (wsInstance && wsInstance.onmessage) {
@@ -136,6 +136,8 @@ describe('MoveProgress 页面 (FE-UI-06)', () => {
           total: 100,
           failed: 0,
           total_size: 52428800,
+          emptied_dirs: 3,
+          status: 'done',
         }),
       });
     }
@@ -145,8 +147,48 @@ describe('MoveProgress 页面 (FE-UI-06)', () => {
           actionType: 'move_to_folder',
           done: 100,
           total: 100,
+          emptiedDirs: 3,
         }),
       }));
     });
+  });
+
+  it('文件移完但无 done 状态的进度消息不应提前跳转（之后还有空文件夹清理阶段）', async () => {
+    await renderPage();
+    const wsInstance = mockWsInstances[mockWsInstances.length - 1];
+    if (wsInstance && wsInstance.onmessage) {
+      wsInstance.onmessage({
+        data: JSON.stringify({
+          action: 'move_to_folder',
+          batches: [{ id: 1, total: 100, done: 100, status: 'done' }],
+          done: 100,
+          total: 100,
+        }),
+      });
+    }
+    // 留出跳转窗口
+    await new Promise(r => setTimeout(r, 100));
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('收到清理空文件夹阶段消息时应显示提示且不跳转', async () => {
+    await renderPage();
+    const wsInstance = mockWsInstances[mockWsInstances.length - 1];
+    if (wsInstance && wsInstance.onmessage) {
+      wsInstance.onmessage({
+        data: JSON.stringify({
+          action: 'move_to_folder',
+          phase: 'cleaning_empty_dirs',
+          current_dir: '/nas/dup_dir',
+          emptied_dirs: 2,
+        }),
+      });
+    }
+    await waitFor(() => {
+      expect(screen.getByText(/正在清理空文件夹/)).toBeInTheDocument();
+      expect(screen.getByText(/已清理 2 个/)).toBeInTheDocument();
+    });
+    expect(mockNavigate).not.toHaveBeenCalled();
+    // 清理阶段消息不应重置文件进度（此前 done=45/total=200 已展示时的回归保护）
   });
 });

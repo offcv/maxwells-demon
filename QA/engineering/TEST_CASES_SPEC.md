@@ -610,6 +610,54 @@ npx vitest run --coverage
 | **预期结果** | 中断后已成功移动的文件保留在目标目录，出错文件保留在原位，操作状态为 `error` |
 | **实现状态** | 📋 待实现 |
 
+### 10.9 AE-09 ~ AE-10：空文件夹清理阶段（新增）
+
+| 属性 | 内容 |
+|------|------|
+| **场景** | 文件移动完成后自动清理残留的空文件夹（`_cleanup_empty_dirs`） |
+| **前置条件** | 临时目录树 + `ScanSession`（`scan_paths` 指向扫描根） |
+| **操作步骤** | 1. 调用 `execute_move_to_folder` / `execute_move_to_trash`<br>2. 验证空目录去向、级联上溯、保护名单、`FolderMark` 清理 |
+| **预期结果** | 见下方分项 |
+
+**AE-09 判定口径**：
+
+| 用例 | 预期 | 实现状态 |
+|------|------|----------|
+| 真空目录 | 移到目标目录/#recycle，`emptied_dirs=1` | ✅ `test_truly_empty_dir_cleaned` |
+| 只剩 `.DS_Store` / `@eaDir` | 视为空，清理 | ✅ `test_ignored_entries_treated_as_empty` |
+| 剩 0 字节普通文件 / symlink | 视为有内容，不清理 | ✅ `test_zero_byte_file_keeps_dir` / `test_symlink_keeps_dir` |
+| 剩未移动的普通文件 | 不清理 | ✅ `test_dir_with_kept_file_not_cleaned` |
+
+**AE-10 级联与保护**：
+
+| 用例 | 预期 | 实现状态 |
+|------|------|----------|
+| a/b/c 三层级联 | 全部清理（`emptied_dirs=3`），扫描根保留 | ✅ `test_cascade_up_to_but_not_root` |
+| 文件直接位于扫描根 | 根保留 | ✅ `test_root_level_file_leaves_root_intact` |
+| dest_path 在扫描树内 | dest 及扫描根不受影响 | ✅ `test_dest_inside_scan_tree_protected` |
+| trash 场景去向 | 空目录进入 `#recycle` | ✅ `test_trash_mode_moves_dir_to_recycle` |
+| 目标已有同名目录 | 自动加 `_1` 后缀 | ✅ `test_dir_name_collision_suffix` |
+
+**AE-10b FolderMark 级联删除**：
+
+| 用例 | 预期 | 实现状态 |
+|------|------|----------|
+| 被清目录及子路径的标记删除，无关标记保留 | ✅ | `test_marks_under_cleaned_dir_removed` |
+| 前缀边界：`/photos` 清理不误删 `/photos-2` 标记 | ✅ | `test_prefix_boundary_no_overreach` |
+| 跨会话隔离：其他 session 对同一目录的标记保留 | ✅ | `test_session_isolation` |
+
+**AE-10c 防御性场景**：
+
+| 用例 | 预期 | 实现状态 |
+|------|------|----------|
+| 会话不在 DB（无法确定上溯边界） | 跳过清理 | ✅ `test_no_session_record_skips_cleanup` |
+| 主操作取消 | 跳过清理阶段 | ✅ `test_cancelled_action_skips_cleanup` |
+| 无成功移动文件 | 不触发清理 | ✅ `test_no_moved_files_no_cleanup` |
+| 候选目录磁盘不存在（假路径） | 安全跳过，状态仍为 done | ✅ `test_nonexistent_source_dirs_ignored` |
+| 清理阶段单目录失败 | 不影响 done 状态，`empty_dir_failed` 计数 | ✅ `test_cleanup_failure_does_not_break_done` |
+
+（以上均在 `test_empty_dir_cleanup.py`）
+
 ---
 
 ## 11. 后端 API 路由测试（API）

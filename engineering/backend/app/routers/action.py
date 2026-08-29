@@ -84,6 +84,8 @@ async def get_action_status(id: str):
             "done": current_action.done,
             "total": current_action.total,
             "failed": current_action.failed,
-            "total_size": current_action.total_size
+            "total_size": current_action.total_size,
+            "emptied_dirs": current_action.emptied_dirs,
+            "empty_dir_failed": current_action.empty_dir_failed
         }
     return {"status": "idle"}

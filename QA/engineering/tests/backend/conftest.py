@@ -105,6 +105,8 @@ def reset_global_state():
     current_action.session_id = None
     current_action.cancel_flag = False
     current_action.running = False
+    current_action.emptied_dirs = 0
+    current_action.empty_dir_failed = 0
     yield
 
 # ── 测试数据库 ────────────────────────────────────────────────────────
