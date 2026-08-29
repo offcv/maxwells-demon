@@ -27,6 +27,8 @@ The system automatically inherits these rules down to all child files. This mean
 - 🚀 **Lightning-Fast Two-Stage Hash Scanning Engine**: Optimized for the limited CPU performance of a NAS. It utilizes a two-stage hash strategy with `xxHash64` (initial screening) + `SHA-256` (confirmation). High-intensity hashing is only performed when file sizes and initial hashes match perfectly, making scanning speeds far superior to traditional tools.
 - 🐳 **Native Docker Support**: Provides a `docker-compose` one-click deployment solution, perfectly isolating the environment and safely mounting NAS storage volumes.
 - 🖥️ **Modern UI**: Supports real-time WebSocket progress pushes and features an intuitive tree-directory display, bidding farewell to the rudimentary noodle-like lists of traditional software.
+- 🧹 **Automatic Empty Folder Cleanup**: After files are cleaned up, leftover empty folders are automatically removed (following the main action to trash or destination folder). System leftovers like `.DS_Store` are smartly ignored, and folders containing any user files are never touched.
+- 📊 **Real-time Statistics**: After cleanup, session lists and folder trees automatically reflect the current state — what has been cleaned and how much space remains reclaimable, at a glance.
 
 ---
 
