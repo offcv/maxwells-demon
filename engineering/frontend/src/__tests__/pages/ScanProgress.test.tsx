@@ -141,7 +141,8 @@ describe('ScanProgress 页面 (FE-UI-03)', () => {
     mockStoreState.remainingSec = 750;
     await renderPage();
     expect(screen.getByText('80 / 200 (40.0%)')).toBeInTheDocument();
-    expect(screen.getByText('750 秒')).toBeInTheDocument();
+    // 预计剩余时间统一为 HH:MM:SS 格式（750 秒 = 00:12:30）
+    expect(screen.getByText('00:12:30')).toBeInTheDocument();
   });
 
   it('阶段2应显示当前文件名（仅 basename）', async () => {
@@ -156,7 +157,8 @@ describe('ScanProgress 页面 (FE-UI-03)', () => {
     mockStoreState.phase2 = { computed: 50, total_candidates: 100, percent: 50, current_file: 'f.mp4' };
     mockStoreState.elapsedSec = 120;
     await renderPage();
-    expect(screen.getByText('已用时间: 120s')).toBeInTheDocument();
+    // 已用时间统一为 HH:MM:SS 格式（120 秒 = 00:02:00）
+    expect(screen.getByText('已用时间: 00:02:00')).toBeInTheDocument();
   });
 
   it('阶段进度条宽度应与 percent 一致', async () => {

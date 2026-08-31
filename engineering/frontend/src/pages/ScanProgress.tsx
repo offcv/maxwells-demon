@@ -143,6 +143,14 @@ export default function ScanProgress() {
     });
   };
 
+  // 统一的时长格式化：HH:MM:SS（与扫描结果页口径一致）
+  const formatTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+    const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+    const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+    return `${h}:${m}:${s}`;
+  };
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <header style={{ 
@@ -240,12 +248,12 @@ export default function ScanProgress() {
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: '#8E8E93', fontSize: 14 }}>预计剩余</span>
-              <span style={{ fontSize: 14, fontWeight: 600 }}>{phase2 ? `${Math.round(remainingSec)} 秒` : '-'}</span>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>{phase2 && remainingSec > 0 ? formatTime(remainingSec) : '-'}</span>
             </div>
           </div>
-          
+
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
-            <span style={{ color: '#8E8E93', fontSize: 13 }}>已用时间: {Math.round(elapsedSec)}s</span>
+            <span style={{ color: '#8E8E93', fontSize: 13 }}>已用时间: {formatTime(elapsedSec)}</span>
           </div>
         </div>
       </main>

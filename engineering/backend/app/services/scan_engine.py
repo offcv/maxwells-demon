@@ -245,7 +245,8 @@ async def run_scan(scan_paths: list, session_id: str = None):
                 "type": "scan_progress",
                 "session_id": current_scan.session_id,
                 "status": "phase2",
-                "phase1": None,
+                # 携带阶段1最终快照：页面刷新/重连后前端仍能正确显示已发现文件数
+                "phase1": {"scanned": current_scan.scanned_total, "current_file": ""},
                 "phase2": {
                     "computed": 0,
                     "total_candidates": 0,
@@ -290,7 +291,8 @@ async def run_scan(scan_paths: list, session_id: str = None):
                     "type": "scan_progress",
                     "session_id": current_scan.session_id,
                     "status": "phase2",
-                    "phase1": None,
+                    # 携带阶段1最终快照：页面刷新/重连后前端仍能正确显示已发现文件数
+                    "phase1": {"scanned": current_scan.scanned_total, "current_file": ""},
                     "phase2": {
                         "computed": computed,
                         "total_candidates": total_candidates,

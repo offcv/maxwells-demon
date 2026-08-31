@@ -67,6 +67,31 @@ def _norm_path(p: str) -> str:
     return os.path.normcase(os.path.normpath(p))
 
 
+# Linux 文件系统（ext4/btrfs 等）单文件名上限，按字节计（中文 UTF-8 每字 3 字节）
+_MAX_FILENAME_BYTES = 255
+
+
+def _unique_target(dest_dir: str, src_name: str) -> str:
+    """
+    在 dest_dir 内为 src_name 生成不冲突的目标路径。
+
+    重名时追加 _1/_2 后缀；若加后缀后总长超过文件系统单文件名上限（255 字节），
+    先截断原名再追加后缀——避免超长文件名（如长中文命名）移动时报 Errno 36。
+    """
+    base, ext = os.path.splitext(src_name)
+    target = os.path.join(dest_dir, src_name)
+    counter = 1
+    while os.path.exists(target):
+        suffix = f"_{counter}"
+        max_base = _MAX_FILENAME_BYTES - len(ext.encode("utf-8")) - len(suffix.encode("utf-8"))
+        trunc = base
+        while trunc and len(trunc.encode("utf-8")) > max_base:
+            trunc = trunc[:-1]
+        target = os.path.join(dest_dir, f"{trunc}{suffix}{ext}")
+        counter += 1
+    return target
+
+
 def _dir_is_empty_ignoring(path: str) -> bool:
     """
     判断目录是否“视为空”：
@@ -287,13 +312,7 @@ async def execute_move_to_folder(session_id: str, files_to_move: list, dest_path
                     cancelled = True
                     break
                 try:
-                    base = os.path.basename(f_info["path"])
-                    target = os.path.join(dest_path, base)
-                    counter = 1
-                    while os.path.exists(target):
-                        name, ext = os.path.splitext(base)
-                        target = os.path.join(dest_path, f"{name}_{counter}{ext}")
-                        counter += 1
+                    target = _unique_target(dest_path, os.path.basename(f_info["path"]))
                     shutil.move(f_info["path"], target)
 
                     db.query(ScanFile).filter(ScanFile.session_id == session_id, ScanFile.path == f_info["path"]).delete()
@@ -322,12 +341,7 @@ async def execute_move_to_folder(session_id: str, files_to_move: list, dest_path
         if not cancelled:
             def _move_dir_to_dest(d):
                 base = os.path.basename(d.rstrip(os.sep))
-                target = os.path.join(dest_path, base)
-                counter = 1
-                while os.path.exists(target):
-                    name, ext = os.path.splitext(base)
-                    target = os.path.join(dest_path, f"{name}_{counter}{ext}")
-                    counter += 1
+                target = _unique_target(dest_path, base)
                 shutil.move(d, target)
             try:
                 await _cleanup_empty_dirs(db, session_id, moved_paths, _move_dir_to_dest, dest_path=dest_path)
@@ -370,14 +384,8 @@ async def execute_move_to_trash(session_id: str, files_to_move: list):
         import shutil
         trash_dir = os.path.join(settings.NAS_ROOT, "#recycle")
         os.makedirs(trash_dir, exist_ok=True)
-        # Avoid naming collision in trash
-        base = os.path.basename(p)
-        target = os.path.join(trash_dir, base)
-        counter = 1
-        while os.path.exists(target):
-            name, ext = os.path.splitext(base)
-            target = os.path.join(trash_dir, f"{name}_{counter}{ext}")
-            counter += 1
+        # 重名自动加后缀（超长文件名先截断），移入群晖 #recycle
+        target = _unique_target(trash_dir, os.path.basename(p))
         shutil.move(p, target)
 
     if settings.DOCKER_MODE:

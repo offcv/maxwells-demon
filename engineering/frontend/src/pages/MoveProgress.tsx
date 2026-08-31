@@ -32,6 +32,9 @@ export default function MoveProgress() {
   const completedRef = useRef(false);
   const [cleaningDirs, setCleaningDirs] = useState(false);
   const [emptiedDirs, setEmptiedDirs] = useState(0);
+  // 无任务兜底：页面刷新后会话身份可能丢失，轮询持续返回 idle 时提示用户
+  const [noTask, setNoTask] = useState(false);
+  const idleStreakRef = useRef(0);
   const [dialog, setDialog] = useState<DialogConfig>({ isOpen: false, type: 'alert', title: '', message: '' });
 
   const closeDialog = () => setDialog(prev => ({ ...prev, isOpen: false }));
@@ -47,9 +50,15 @@ export default function MoveProgress() {
         closeDialog();
         setCancelling(true);
         try {
-          await cancelAction(sessionId!);
+          const res = await cancelAction(sessionId!);
+          // 后端答复"没有活动任务"时不再等待取消确认，直接进入兜底提示
+          if (res.data?.message && String(res.data.message).includes('No active')) {
+            setNoTask(true);
+            setCancelling(false);
+          }
         } catch (e) {
           console.error('Cancel failed', e);
+          setCancelling(false);
         }
       }
     });
@@ -66,7 +75,15 @@ export default function MoveProgress() {
       try {
         const res = await getActionStatus(sessionId!);
         const data = res.data;
-        if (!data || data.status === 'idle') return;
+        if (!data || data.status === 'idle') {
+          // 连续约 10 秒均为 idle 且从未见过任务活动 → 会话身份丢失或任务早已结束
+          idleStreakRef.current += 1;
+          if (idleStreakRef.current >= 10) {
+            setNoTask(true);
+          }
+          return;
+        }
+        idleStreakRef.current = 0;
         
         setActionType(data.action || 'move_to_folder');
         setDone(data.done || 0);
@@ -178,14 +195,52 @@ export default function MoveProgress() {
         </div>
       </header>
 
-      <main style={{ 
-        flex: 1, 
-        display: 'flex', 
-        flexDirection: 'column', 
+      <main style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
         padding: '32px 48px',
         gap: 32
       }}>
+        {/* 无任务兜底：页面刷新导致会话身份丢失，或任务早已结束 */}
+        {noTask ? (
+          <div style={{
+            width: '100%',
+            maxWidth: 600,
+            backgroundColor: '#FFFFFF',
+            borderRadius: 12,
+            border: '1px solid #D1D1D6',
+            padding: 32,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 20
+          }}>
+            <div style={{ fontSize: 20, fontWeight: 600 }}>未找到进行中的任务</div>
+            <div style={{ fontSize: 14, color: '#8E8E93', textAlign: 'center', lineHeight: 1.6 }}>
+              页面刷新后任务身份可能丢失，或任务已经结束。<br />
+              请从首页「查看历史」重新进入该会话，查看最新的清理结果。
+            </div>
+            <button
+              onClick={() => navigate('/')}
+              style={{
+                height: 40,
+                padding: '0 32px',
+                borderRadius: 6,
+                backgroundColor: '#007AFF',
+                color: '#FFFFFF',
+                border: 'none',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              返回首页
+            </button>
+          </div>
+        ) : (
+        <>
         {/* Title section */}
         <div style={{ width: '100%', maxWidth: 600, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ fontSize: 24, fontWeight: 600, color: '#000000' }}>{titleText}</div>
@@ -265,6 +320,8 @@ export default function MoveProgress() {
               正在清理空文件夹…（已清理 {emptiedDirs} 个）
             </span>
           </div>
+        )}
+        </>
         )}
       </main>
       <style>{`

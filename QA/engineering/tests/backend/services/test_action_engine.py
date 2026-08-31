@@ -512,3 +512,68 @@ class TestMoveReadonlyFiles:
             for f in files_to_move:
                 if os.path.exists(f["path"]):
                     os.chmod(f["path"], 0o644)
+
+
+# ======================================================================
+# AE-11: 超长文件名重名冲突自动截断
+# ======================================================================
+
+class TestLongFilenameCollision:
+    """AE-11: 超长文件名 + 重名后缀导致 Errno 36 的修复验证"""
+
+    @pytest.mark.asyncio
+    async def test_long_name_collision_truncated(self, tmp_fs):
+        """目标已有同名时，加后缀若超 255 字节则先截断原名（不再 Errno 36）"""
+        import glob
+        src = os.path.join(tmp_fs, "src_long")
+        dst = os.path.join(tmp_fs, "dst_long")
+        os.makedirs(src)
+        os.makedirs(dst)
+
+        # 构造 254 字节的长名（"长"*83=249 + "a"=250 字节 base + ".pdf"=4 字节），合法可创建
+        long_name = "长" * 83 + "a.pdf"
+        assert len(long_name.encode("utf-8")) == 254
+
+        src_path = os.path.join(src, long_name)
+        with open(src_path, "w") as f:
+            f.write("dup")
+
+        # 目标预置同名文件 → 触发重名；直接加 _1 会到 256 字节（超限）→ 必须截断
+        with open(os.path.join(dst, long_name), "w") as f:
+            f.write("original")
+
+        await execute_move_to_folder(
+            "session_test",
+            [{"path": src_path, "size": 3}],
+            dst,
+        )
+
+        # 原有文件保留
+        assert os.path.exists(os.path.join(dst, long_name))
+        # 移入的文件被截断+加后缀，且总长不超过 255 字节
+        moved = glob.glob(os.path.join(dst, "*_1.pdf"))
+        assert len(moved) == 1, f"期望截断后缀文件存在，目录内容: {os.listdir(dst)}"
+        assert len(os.path.basename(moved[0]).encode("utf-8")) <= 255
+        assert not os.path.exists(src_path)
+
+    @pytest.mark.asyncio
+    async def test_normal_name_collision_still_suffixed(self, tmp_fs):
+        """普通文件名重名行为不变（_1 后缀，不截断）"""
+        src = os.path.join(tmp_fs, "src_norm")
+        dst = os.path.join(tmp_fs, "dst_norm")
+        os.makedirs(src)
+        os.makedirs(dst)
+
+        src_path = os.path.join(src, "data.txt")
+        with open(src_path, "w") as f:
+            f.write("dup")
+        with open(os.path.join(dst, "data.txt"), "w") as f:
+            f.write("original")
+
+        await execute_move_to_folder(
+            "session_test",
+            [{"path": src_path, "size": 3}],
+            dst,
+        )
+
+        assert os.path.exists(os.path.join(dst, "data_1.txt"))
