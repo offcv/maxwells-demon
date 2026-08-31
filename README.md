@@ -47,9 +47,11 @@
 
 ## 🚀 快速开始 (基于 Docker，推荐 NAS 用户)
 
-这是在群晖 NAS 或任何支持 Docker 的 Linux 服务器上部署“麦克斯韦妖”的最快方式。
+这是在群晖 NAS 或任何支持 Docker 的 Linux 服务器上部署"麦克斯韦妖"的最快方式。提供两种方式，任选其一。
 
-### 1. 获取代码与配置
+### 方式一：命令行部署（适合熟悉终端的用户）
+
+**1. 获取代码与配置**
 
 克隆本仓库到你的服务器：
 
@@ -58,7 +60,7 @@ git clone https://github.com/offcv/maxwells-demon.git
 cd maxwells-demon/engineering
 ```
 
-### 2. 配置存储卷 (挂载你的 NAS)
+**2. 配置存储卷 (挂载你的 NAS)**
 
 打开 `docker-compose.yml` 文件，修改 `volumes` 部分，将 `/volume1` 替换为你实际想要扫描的 NAS 路径：
 
@@ -72,13 +74,29 @@ services:
       - maxwells-demon-data:/app/data
 ```
 
-### 3. 一键启动
+**3. 一键启动**
 
 在 `engineering` 目录下执行：
 
 ```bash
 docker-compose up -d
 ```
+
+### 方式二：图形界面部署（群晖 Container Manager，无需命令行）
+
+全程点鼠标，适合不熟悉 SSH/终端的 NAS 用户（需 DSM 7.2+）。
+
+1. **下载项目压缩包**：在电脑浏览器打开本仓库页面，点击绿色「Code」按钮 → 「Download ZIP」，解压得到 `maxwells-demon-main` 文件夹。
+2. **上传到 NAS**：打开群晖「File Station」→ 进入 `docker` 文件夹 → 点「上传」→「上传文件夹」→ 选择解压后的文件夹。
+3. **创建项目**：打开「Container Manager」→ 左侧「项目」→「新建」：
+   - 项目名称：`maxwells-demon`
+   - 路径：选择刚上传的 `docker/maxwells-demon-main`
+   - 来源：选择「使用现有的 docker-compose.yml」
+   - 文件位置：`maxwells-demon-main/engineering/docker-compose.yml`
+   - 如需修改挂载路径（同方式二第 2 步），可先在本地改好 `docker-compose.yml` 再上传
+4. **等待构建完成**（首次约 5~15 分钟），浏览器访问下方地址即可。
+
+### 访问
 
 启动完成后，打开浏览器访问 `http://你的服务器IP:3080` 即可开始使用！
 

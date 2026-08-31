@@ -47,9 +47,11 @@ The system automatically inherits these rules down to all child files. This mean
 
 ## 🚀 Quick Start (Docker, Recommended for NAS Users)
 
-This is the fastest way to deploy Maxwell's Demon on a Synology NAS or any Linux server supporting Docker.
+This is the fastest way to deploy Maxwell's Demon on a Synology NAS or any Linux server supporting Docker. Choose either method below.
 
-### 1. Get Code & Configuration
+### Method 1: Command-Line Deployment (for users familiar with terminals)
+
+**1. Get Code & Configuration**
 
 Clone this repository to your server:
 
@@ -58,7 +60,7 @@ git clone https://github.com/offcv/maxwells-demon.git
 cd maxwells-demon/engineering
 ```
 
-### 2. Configure Storage Volumes (Mount your NAS)
+**2. Configure Storage Volumes (Mount your NAS)**
 
 Open the `docker-compose.yml` file, modify the `volumes` section, and replace `/volume1` with the actual NAS path you want to scan:
 
@@ -72,13 +74,29 @@ services:
       - maxwells-demon-data:/app/data
 ```
 
-### 3. One-Click Start
+**3. One-Click Start**
 
 Execute in the `engineering` directory:
 
 ```bash
 docker-compose up -d
 ```
+
+### Method 2: GUI Deployment (Synology Container Manager, no command line)
+
+Fully mouse-driven, suitable for NAS users unfamiliar with SSH/terminals (requires DSM 7.2+).
+
+1. **Download the project archive**: Open this repository page in your computer's browser, click the green "Code" button → "Download ZIP", and extract the `maxwells-demon-main` folder.
+2. **Upload to NAS**: Open Synology "File Station" → go to the `docker` folder → click "Upload" → "Upload Folder" → select the extracted folder.
+3. **Create the project**: Open "Container Manager" → "Project" → "Create":
+   - Project name: `maxwells-demon`
+   - Path: select the uploaded `docker/maxwells-demon-main`
+   - Source: choose "Use existing docker-compose.yml"
+   - File location: `maxwells-demon-main/engineering/docker-compose.yml`
+   - To modify the mount path (same as Method 1 step 2), edit `docker-compose.yml` locally before uploading
+4. **Wait for the build to complete** (5–15 minutes on first run), then visit the address below.
+
+### Access
 
 Once started, open your browser and visit `http://YOUR_SERVER_IP:3080` to start using it!
 
