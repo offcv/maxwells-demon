@@ -26,36 +26,51 @@ class ActionState:
 current_action = ActionState()
 
 def _update_cache_after_action(db, session_id: str):
-    """清理操作后，不重置分类，而是修剪失效的组，并更新剩余组的统计"""
+    """清理操作后，不重置分类，而是修剪失效的组，并更新剩余组的统计。
+
+    一次性批量取回该会话全部文件在内存中按组分桶——避免逐组查询：
+    大数据量（数万组）下逐组查询会长时间阻塞事件循环，期间所有 API 无响应。
+    """
     if not scheme_cache.is_valid(session_id):
         return
-        
+
+    from collections import defaultdict
+
     engine = SchemeEngine(db, session_id)
+    all_rows = (
+        db.query(ScanFile.group_id, ScanFile.path, ScanFile.size)
+        .filter(ScanFile.session_id == session_id)
+        .all()
+    )
+    files_by_group = defaultdict(list)
+    for gid, path, size in all_rows:
+        files_by_group[gid].append((path, size))
+
     for cat_name, cat_data in scheme_cache.data.items():
         valid_groups = []
         cat_data["file_count"] = 0
         cat_data["size"] = 0
         cat_data["total_file_count"] = 0
         cat_data["total_size"] = 0
-        
+
         for group_id in cat_data["groups"]:
-            group_files = db.query(ScanFile).filter(ScanFile.session_id == session_id, ScanFile.group_id == group_id).all()
+            group_files = files_by_group.get(group_id, [])
             total = len(group_files)
-            
+
             # 过滤逻辑：如果组内文件数 <= 1，视为已彻底清理或无需处理的无效组，剔除
             if total <= 1:
                 continue
-                
+
             valid_groups.append(group_id)
             cat_data["total_file_count"] += total
-            
-            for f in group_files:
-                cat_data["total_size"] += f.size
-                act = engine.resolve_action(f.path)
+
+            for path, size in group_files:
+                cat_data["total_size"] += size
+                act = engine.resolve_action(path)
                 if act.action.value == "delete":
                     cat_data["file_count"] += 1
-                    cat_data["size"] += f.size
-                    
+                    cat_data["size"] += size
+
         # 更新修剪后的组列表
         cat_data["groups"] = valid_groups
 
@@ -90,6 +105,17 @@ def _unique_target(dest_dir: str, src_name: str) -> str:
         target = os.path.join(dest_dir, f"{trunc}{suffix}{ext}")
         counter += 1
     return target
+
+
+def _move_file_to_dir(src: str, dest_dir: str) -> None:
+    """在目标目录内生成不冲突名称并移动文件（同步阻塞 IO，供线程池执行）"""
+    target = _unique_target(dest_dir, os.path.basename(src))
+    shutil.move(src, target)
+
+
+def _dir_alive(path: str) -> bool:
+    """目录真实存在且不是符号链接（同步 stat 调用，供线程池执行）"""
+    return os.path.isdir(path) and not os.path.islink(path)
 
 
 def _dir_is_empty_ignoring(path: str) -> bool:
@@ -205,13 +231,14 @@ async def _cleanup_empty_dirs(db, session_id: str, moved_paths: list, move_dir_f
         if nd in protected or nd in roots_norm:
             continue
         # 目录必须真实存在（API 测试可能传入磁盘上不存在的假路径）；symlink 目录不动
-        if not os.path.isdir(d) or os.path.islink(d):
+        # （文件系统检查均在线程池执行，避免阻塞事件循环）
+        if not await asyncio.to_thread(_dir_alive, d):
             continue
-        if not _dir_is_empty_ignoring(d):
+        if not await asyncio.to_thread(_dir_is_empty_ignoring, d):
             continue
 
         try:
-            move_dir_func(d)
+            await asyncio.to_thread(move_dir_func, d)
             current_action.emptied_dirs += 1
             _delete_folder_marks_under(db, session_id, d)
             await manager.broadcast("action", {
@@ -257,7 +284,7 @@ async def execute_move_to_folder(session_id: str, files_to_move: list, dest_path
     num_batches = math.ceil(total / batch_size) if total > 0 else 1
 
     if not os.path.exists(dest_path):
-        os.makedirs(dest_path, exist_ok=True)
+        await asyncio.to_thread(lambda: os.makedirs(dest_path, exist_ok=True))
 
     batches = []
     for b in range(num_batches):
@@ -312,8 +339,9 @@ async def execute_move_to_folder(session_id: str, files_to_move: list, dest_path
                     cancelled = True
                     break
                 try:
-                    target = _unique_target(dest_path, os.path.basename(f_info["path"]))
-                    shutil.move(f_info["path"], target)
+                    # 文件移动（含重名处理）在线程池执行，避免阻塞事件循环——
+                    # 大批量/慢速存储场景下同步移动会让所有 API 与 WS 广播失去响应
+                    await asyncio.to_thread(_move_file_to_dir, f_info["path"], dest_path)
 
                     db.query(ScanFile).filter(ScanFile.session_id == session_id, ScanFile.path == f_info["path"]).delete()
                     db.query(FileOverride).filter(FileOverride.session_id == session_id, FileOverride.file_path == f_info["path"]).delete()
@@ -454,7 +482,8 @@ async def execute_move_to_trash(session_id: str, files_to_move: list):
                     cancelled = True
                     break
                 try:
-                    trash_func(f_info["path"])
+                    # 移入废纸篓（docker_trash 的重名处理 / send2trash）在线程池执行
+                    await asyncio.to_thread(trash_func, f_info["path"])
 
                     db.query(ScanFile).filter(ScanFile.session_id == session_id, ScanFile.path == f_info["path"]).delete()
                     db.query(FileOverride).filter(FileOverride.session_id == session_id, FileOverride.file_path == f_info["path"]).delete()
