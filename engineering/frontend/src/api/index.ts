@@ -30,6 +30,7 @@ export const getActionStatus = (id: string) => api.get(`/sessions/${id}/action/s
 
 export const revealFile = (path: string) => api.post('/reveal-file', { path });
 /** reveal-file 的后端实际路径为 /api/reveal-file，但 Vite proxy 会转发 /api -> backend */
+export const getConfig = () => api.get('/config');
 export const deleteSession = (id: string) => api.delete(`/sessions/${id}`);
 export const getUnreadableFiles = (id: string) => api.get(`/sessions/${id}/unreadable-files`);
 export const browseFolder = (path: string) => api.get(`/folders/browse?path=${encodeURIComponent(path)}`);

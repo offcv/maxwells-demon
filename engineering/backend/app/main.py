@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from app.database import engine, Base
 from app.routers import scan, results, folders, scheme, action, ws_routes
+from app.config import settings
 
 # Create DB tables
 Base.metadata.create_all(bind=engine)
@@ -27,6 +28,16 @@ app.include_router(action.router, prefix="/api/sessions", tags=["action"])
 
 class RevealPath(BaseModel):
     path: str
+
+@app.get("/api/config")
+def get_runtime_config():
+    """运行环境信息：前端据此在「打开所在文件夹」（本地）与「复制路径」（NAS）间切换，
+    并按 nas_root/host_nas_path 规则把容器内路径翻译为宿主机路径。"""
+    return {
+        "docker_mode": settings.DOCKER_MODE,
+        "nas_root": settings.NAS_ROOT,
+        "host_nas_path": settings.HOST_NAS_PATH,
+    }
 
 @app.post("/api/reveal-file")
 def reveal_file(data: RevealPath):

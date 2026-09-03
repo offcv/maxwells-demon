@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useScanStore } from '../store/scanStore';
 import { useSchemeStore } from '../store/schemeStore';
-import { getCategoryGroups, updateFileAction, getSchemeCategories } from '../api';
-import { ArrowLeft, FolderOpen, Trash2, Check, X } from 'lucide-react';
+import { getCategoryGroups, updateFileAction, getSchemeCategories, revealFile, getConfig } from '../api';
+import { ArrowLeft, FolderOpen, Trash2, Check, X, Copy } from 'lucide-react';
+import { translatePath, copyText, RuntimeConfig } from '../utils/path';
 
 export default function CategoryDetail() {
   const { type } = useParams<{ type: string }>();
@@ -12,9 +13,35 @@ export default function CategoryDetail() {
   const categories = useSchemeStore(state => state.categories);
   const setCategories = useSchemeStore(state => state.setCategories);
   const setFinishedAt = useSchemeStore(state => state.setFinishedAt);
-  
+
   const [groups, setGroups] = useState<any[]>([]);
   const [isGrayedOut, setIsGrayedOut] = useState(false);
+  // 运行环境：NAS 下提供「复制路径」，本地保留「打开所在文件夹」
+  const [envConfig, setEnvConfig] = useState<RuntimeConfig | null>(null);
+  const [copiedPath, setCopiedPath] = useState<string | null>(null);
+
+  useEffect(() => {
+    getConfig().then(res => setEnvConfig(res.data)).catch(() => setEnvConfig(null));
+  }, []);
+
+  const handlePathAction = async (path: string) => {
+    if (envConfig?.docker_mode) {
+      // NAS：复制翻译后的宿主机路径（可直接粘贴到 File Station 地址栏定位）
+      const target = translatePath(path, envConfig);
+      const ok = await copyText(target);
+      if (ok) {
+        setCopiedPath(path);
+        setTimeout(() => setCopiedPath(null), 2000);
+      }
+    } else {
+      // 本地：在系统文件管理器中打开并定位
+      try {
+        await revealFile(path);
+      } catch (e) {
+        console.error('revealFile failed', e);
+      }
+    }
+  };
 
   const loadData = async () => {
     if (!sessionId || !type) return;
@@ -170,7 +197,7 @@ export default function CategoryDetail() {
             <div style={{ width: 140 }}>创建时间</div>
             <div style={{ width: 140 }}>修改时间</div>
             <div style={{ flex: 1 }}>路径</div>
-            <div style={{ width: 40, textAlign: 'center' }}>打开</div>
+            <div style={{ width: 40, textAlign: 'center' }}>{envConfig?.docker_mode ? '复制' : '打开'}</div>
           </div>
 
           <div style={{ overflowY: 'auto', flex: 1 }}>
@@ -238,11 +265,25 @@ export default function CategoryDetail() {
                     <div style={{ width: 80, color: '#8E8E93' }}>{formatSize(f.size)}</div>
                     <div style={{ width: 140, color: '#8E8E93' }}>{formatDate(f.created_time)}</div>
                     <div style={{ width: 140, color: '#8E8E93' }}>{formatDate(f.modified_time)}</div>
-                    <div style={{ flex: 1, color: 'var(--primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.mark_source}>
-                      {f.path}
+                    {/* 路径列显示所在文件夹（文件名列已有文件名）；悬停提示完整路径 */}
+                    <div
+                      style={{ flex: 1, color: 'var(--primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      title={f.path}
+                    >
+                      {f.path.substring(0, f.path.lastIndexOf('/')) || '/'}
                     </div>
-                    <div style={{ width: 40, display: 'flex', justifyContent: 'center' }}>
-                      <FolderOpen size={16} color="var(--primary)" style={{ cursor: 'pointer' }} />
+                    <div
+                      style={{ width: 40, display: 'flex', justifyContent: 'center', cursor: 'pointer' }}
+                      onClick={() => handlePathAction(f.path)}
+                      title={envConfig?.docker_mode ? (copiedPath === f.path ? '已复制' : '复制路径') : '打开所在文件夹'}
+                    >
+                      {envConfig?.docker_mode ? (
+                        copiedPath === f.path
+                          ? <Check size={16} color="#34C759" />
+                          : <Copy size={16} color="var(--primary)" />
+                      ) : (
+                        <FolderOpen size={16} color="var(--primary)" />
+                      )}
                     </div>
                   </div>
                 ))}

@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useScanStore } from '../store/scanStore';
-import { getSessionSummary, getSessionGroups, revealFile } from '../api';
+import { getSessionSummary, getSessionGroups, revealFile, getConfig } from '../api';
 import { ArrowLeft, ArrowRight, Layers, Files, HardDrive, Timer, FolderOpen } from 'lucide-react';
+import { translatePath, copyText, RuntimeConfig } from '../utils/path';
 
 export default function ScanResults() {
   const navigate = useNavigate();
@@ -11,12 +12,30 @@ export default function ScanResults() {
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [hoveredPath, setHoveredPath] = useState<string | null>(null);
+  // 运行环境：NAS 下点击路径改为「复制路径」，本地保留「打开所在文件夹」
+  const [envConfig, setEnvConfig] = useState<RuntimeConfig | null>(null);
+  const [copiedTip, setCopiedTip] = useState(false);
 
-  const handleReveal = async (path: string) => {
-    try {
-      await revealFile(path);
-    } catch (e) {
-      console.error('revealFile failed', e);
+  useEffect(() => {
+    getConfig().then(res => setEnvConfig(res.data)).catch(() => setEnvConfig(null));
+  }, []);
+
+  const handlePathClick = async (path: string) => {
+    if (envConfig?.docker_mode) {
+      // NAS：复制翻译后的宿主机路径（可直接粘贴到 File Station 地址栏定位）
+      const target = translatePath(path, envConfig);
+      const ok = await copyText(target);
+      if (ok) {
+        setCopiedTip(true);
+        setTimeout(() => setCopiedTip(false), 2000);
+      }
+    } else {
+      // 本地：在系统文件管理器中打开并定位
+      try {
+        await revealFile(path);
+      } catch (e) {
+        console.error('revealFile failed', e);
+      }
     }
   };
 
@@ -96,13 +115,30 @@ export default function ScanResults() {
         </div>
       </header>
 
-      <main style={{ 
-        flex: 1, 
-        display: 'flex', 
+      <main style={{
+        flex: 1,
+        display: 'flex',
         flexDirection: 'column',
         padding: '24px 32px',
         gap: 20
       }}>
+        {/* 复制成功提示（NAS 模式点击路径后显示 2 秒） */}
+        {copiedTip && (
+          <div style={{
+            alignSelf: 'flex-end',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 12px',
+            borderRadius: 6,
+            backgroundColor: 'rgba(52, 199, 89, 0.12)',
+            color: '#248A3D',
+            fontSize: 13,
+            fontWeight: 600
+          }}>
+            路径已复制，可粘贴到 File Station 地址栏定位
+          </div>
+        )}
         {/* Title and Next Button */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -227,7 +263,7 @@ export default function ScanResults() {
                             margin: '-2px -4px',
                             backgroundColor: hoveredPath === f.path ? 'rgba(0, 122, 255, 0.08)' : 'transparent'
                           }}
-                          onClick={() => handleReveal(f.path)}
+                          onClick={() => handlePathClick(f.path)}
                           onMouseEnter={() => setHoveredPath(f.path)}
                           onMouseLeave={() => setHoveredPath(null)}
                           title={f.path}
@@ -243,7 +279,7 @@ export default function ScanResults() {
                               opacity: hoveredPath === f.path ? 1 : 0.6,
                               transition: 'opacity 0.15s'
                             }}
-                            onClick={() => handleReveal(f.path)}
+                            onClick={() => handlePathClick(f.path)}
                             onMouseEnter={() => setHoveredPath(f.path)}
                             onMouseLeave={() => setHoveredPath(null)}
                           />

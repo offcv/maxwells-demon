@@ -18,11 +18,14 @@ import React from 'react';
 const mockGetSessionSummary = vi.fn();
 const mockGetSessionGroups = vi.fn();
 const mockRevealFile = vi.fn();
+const mockGetConfig = vi.fn();
+const mockClipboardWriteText = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../api', () => ({
   getSessionSummary: (...args: any[]) => mockGetSessionSummary(...args),
   getSessionGroups: (...args: any[]) => mockGetSessionGroups(...args),
   revealFile: (...args: any[]) => mockRevealFile(...args),
+  getConfig: (...args: any[]) => mockGetConfig(...args),
 }));
 
 // Mock Store
@@ -48,6 +51,9 @@ describe('ScanResults 页面测试', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSessionId = 'test-session';
+    // 默认本地开发环境（保留"点击路径打开所在文件夹"行为，保护既有用例）
+    mockGetConfig.mockResolvedValue({ data: { docker_mode: false, nas_root: '', host_nas_path: '' } });
+    Object.assign(navigator, { clipboard: { writeText: mockClipboardWriteText } });
     
     // Default mock data
     mockGetSessionSummary.mockResolvedValue({ 
@@ -173,5 +179,49 @@ describe('ScanResults 页面测试', () => {
       fireEvent.click(pathEl);
       expect(mockRevealFile).toHaveBeenCalledWith('/test/photo1.jpg');
     });
+  });
+});
+
+// ======================================================================
+// NAS 模式：点击路径复制翻译后的宿主机路径（v1.2.1）
+// ======================================================================
+
+describe('ScanResults NAS 模式路径复制', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSessionId = 'test-session';
+    mockGetConfig.mockResolvedValue({
+      data: { docker_mode: true, nas_root: '/mnt/nas', host_nas_path: '/volume1' },
+    });
+    Object.assign(navigator, { clipboard: { writeText: mockClipboardWriteText } });
+    mockGetSessionSummary.mockResolvedValue({
+      data: { group_count: 1, file_count: 2, reclaimable_size: 1048576, scan_duration_sec: 10 }
+    });
+    mockGetSessionGroups.mockResolvedValue({
+      data: {
+        data: [
+          {
+            group_id: 1,
+            files: [
+              { path: '/mnt/nas/photos/a.jpg', size: 524288, created_time: 1700000000, modified_time: 1700000000 },
+              { path: '/mnt/nas/backup/photos/a.jpg', size: 524288, created_time: 1700000000, modified_time: 1700000000 },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  it('NAS 模式：点击文件路径应复制翻译后的宿主机路径而非调用 revealFile', async () => {
+    const { default: ScanResults } = await import('../../pages/ScanResults');
+    render(<MemoryRouter><ScanResults /></MemoryRouter>);
+    await waitFor(() => {
+      expect(screen.getByText('/mnt/nas/photos/a.jpg')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('/mnt/nas/photos/a.jpg'));
+    await waitFor(() => {
+      expect(mockClipboardWriteText).toHaveBeenCalledWith('/volume1/photos/a.jpg');
+    });
+    expect(mockRevealFile).not.toHaveBeenCalled();
   });
 });

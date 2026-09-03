@@ -9,6 +9,8 @@ services:
     environment:
       - DOCKER_MODE=true
       - NAS_ROOT=/mnt/nas
+      # NAS 宿主机真实路径：用于把容器内 /mnt/nas/... 翻译为 File Station 可用的路径
+      - HOST_NAS_PATH=/volume1
       - DB_PATH=/app/data/maxwells_demon.db
       - WORKERS=2
     restart: unless-stopped

@@ -20,10 +20,17 @@ const mockNavigate = vi.fn();
 const mockSetFinishedAt = vi.fn();
 const mockGetCategoryGroups = vi.fn();
 const mockUpdateFileAction = vi.fn();
+const mockRevealFile = vi.fn();
+const mockGetConfig = vi.fn();
+
+// 剪贴板 mock（NAS 模式复制路径用例）
+const mockClipboardWriteText = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../api', () => ({
   getCategoryGroups: (...args: any[]) => mockGetCategoryGroups(...args),
   updateFileAction: (...args: any[]) => mockUpdateFileAction(...args),
+  revealFile: (...args: any[]) => mockRevealFile(...args),
+  getConfig: (...args: any[]) => mockGetConfig(...args),
 }));
 
 vi.mock('../../store/scanStore', () => ({
@@ -106,6 +113,9 @@ describe('CategoryDetail 页面 (FE-UI-05 / FE-UI-06)', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mockGetCategoryGroups.mockResolvedValue(makeGroupData());
+    // 默认本地开发环境（保留"打开所在文件夹"行为，保护既有用例）
+    mockGetConfig.mockResolvedValue({ data: { docker_mode: false, nas_root: '', host_nas_path: '' } });
+    Object.assign(navigator, { clipboard: { writeText: mockClipboardWriteText } });
     const store = await import('../../store/schemeStore');
     (store.useSchemeStore as any).__setCategories({
       keep_one: {
@@ -182,9 +192,10 @@ describe('CategoryDetail 页面 (FE-UI-05 / FE-UI-06)', () => {
   it('应渲染文件行数据', async () => {
     await renderPage('keep_one');
     await waitFor(() => {
-      expect(screen.getAllByText('IMG_001.jpg').length).toBeGreaterThan(0);
-      expect(screen.getByText('/photos/vacation/IMG_001.jpg')).toBeInTheDocument();
-      expect(screen.getByText('/backup/photos/IMG_001.jpg')).toBeInTheDocument();
+      expect(screen.getAllByText('IMG_001.jpg').length).toBeGreaterThanOrEqual(1);
+      // v1.2.1 起路径列显示所在文件夹（文件名列已有文件名），完整路径见悬停提示
+      expect(screen.getByText('/photos/vacation')).toBeInTheDocument();
+      expect(screen.getByText('/backup/photos')).toBeInTheDocument();
     });
   });
 
@@ -289,5 +300,84 @@ describe('CategoryDetail 页面 (FE-UI-05 / FE-UI-06)', () => {
       expect(screen.getByText('移动到文件夹')).toBeDisabled();
       expect(screen.getByText('移动到废纸篓')).toBeDisabled();
     });
+  });
+});
+
+// ======================================================================
+// 路径操作：本地"打开所在文件夹" / NAS"复制路径"（v1.2.1）
+// ======================================================================
+
+describe('CategoryDetail 路径操作（按运行环境切换）', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockGetCategoryGroups.mockResolvedValue(makeGroupData());
+    Object.assign(navigator, { clipboard: { writeText: mockClipboardWriteText } });
+    const store = await import('../../store/schemeStore');
+    (store.useSchemeStore as any).__setCategories({
+      keep_one: { groups: [{ group_id: 1 }], file_count: 3, size: 15728640 },
+    });
+  });
+
+  const renderPage = async (type: string = 'keep_one') => {
+    const { default: CategoryDetail } = await import('../../pages/CategoryDetail');
+    return render(
+      <MemoryRouter initialEntries={[`/category/${type}`]}>
+        <Routes>
+          <Route path="/category/:type" element={<CategoryDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+  };
+
+  it('本地模式：点击打开图标应调用 revealFile', async () => {
+    mockGetConfig.mockResolvedValue({ data: { docker_mode: false, nas_root: '', host_nas_path: '' } });
+    await renderPage();
+    await waitFor(() => {
+      expect(screen.getAllByTitle('打开所在文件夹').length).toBeGreaterThanOrEqual(1);
+    });
+    fireEvent.click(screen.getAllByTitle('打开所在文件夹')[0]);
+    await waitFor(() => {
+      expect(mockRevealFile).toHaveBeenCalledWith('/photos/vacation/IMG_001.jpg');
+    });
+    expect(mockClipboardWriteText).not.toHaveBeenCalled();
+  });
+
+  it('NAS 模式：点击复制图标应复制翻译后的宿主机路径', async () => {
+    mockGetConfig.mockResolvedValue({
+      data: { docker_mode: true, nas_root: '/mnt/nas', host_nas_path: '/volume1' },
+    });
+    mockGetCategoryGroups.mockResolvedValue(makeGroupData({
+      files: [
+        {
+          path: '/mnt/nas/photos/vacation/IMG_001.jpg',
+          size: 5242880,
+          action: 'delete',
+          created_time: 1700000000,
+          modified_time: 1700100000,
+          mark_source_type: 'folder_mark',
+          mark_source: 'inherited:/mnt/nas/photos',
+        },
+      ],
+    }));
+    await renderPage();
+    await waitFor(() => {
+      expect(screen.getByTitle('复制路径')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getAllByTitle('复制路径')[0]);
+    await waitFor(() => {
+      // 容器内路径自动翻译为 File Station 可用的宿主机路径
+      expect(mockClipboardWriteText).toHaveBeenCalledWith('/volume1/photos/vacation/IMG_001.jpg');
+    });
+    expect(mockRevealFile).not.toHaveBeenCalled();
+  });
+
+  it('路径列应显示所在文件夹（去掉文件名）且悬停提示完整路径', async () => {
+    mockGetConfig.mockResolvedValue({ data: { docker_mode: false, nas_root: '', host_nas_path: '' } });
+    await renderPage();
+    await waitFor(() => {
+      expect(screen.getByTitle('/photos/vacation/IMG_001.jpg')).toBeInTheDocument();
+    });
+    // 路径列内容为目录部分（文件名列已有文件名）
+    expect(screen.getByText('/photos/vacation')).toBeInTheDocument();
   });
 });
