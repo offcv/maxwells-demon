@@ -23,6 +23,7 @@ const mockGetFolderTree = vi.fn();
 const mockGetFolderMarks = vi.fn();
 const mockSetFolderMark = vi.fn();
 const mockDeleteFolderMark = vi.fn();
+const mockResetFolderMarks = vi.fn().mockResolvedValue({ data: { message: 'Success', deleted: 2 } });
 
 // Mock API
 vi.mock('../../api', () => ({
@@ -30,6 +31,7 @@ vi.mock('../../api', () => ({
   getFolderMarks: (...args: any[]) => mockGetFolderMarks(...args),
   setFolderMark: (...args: any[]) => mockSetFolderMark(...args),
   deleteFolderMark: (...args: any[]) => mockDeleteFolderMark(...args),
+  resetFolderMarks: (...args: any[]) => mockResetFolderMarks(...args),
 }));
 
 // Mock stores
@@ -209,5 +211,50 @@ describe('FolderMarking 页面 (FE-UI-04)', () => {
       expect(screen.getByText(/目录加载失败/)).toBeInTheDocument();
     });
     expect(screen.queryByText('正在加载目录...')).not.toBeInTheDocument();
+  });
+});
+
+// ======================================================================
+// 重置所有标记（v1.2.2）
+// ======================================================================
+
+describe('FolderMarking 重置所有标记', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockMarksState = {};
+    mockResetFolderMarks.mockResolvedValue({ data: { message: 'Success', deleted: 2 } });
+    mockGetFolderTree.mockResolvedValue({ data: [] });
+    mockGetFolderMarks.mockResolvedValue({ data: {} });
+  });
+
+  const renderPage = async () => {
+    const { default: FolderMarking } = await import('../../pages/FolderMarking');
+    return render(<MemoryRouter><FolderMarking /></MemoryRouter>);
+  };
+
+  it('点击"重置所有标记"应弹出确认框，确认后调用接口并清空标记', async () => {
+    await renderPage();
+    fireEvent.click(screen.getByText('重置所有标记'));
+    // 确认弹窗出现（DialogModal 真实组件）
+    expect(await screen.findByText('确定要清除所有文件夹标记吗？清除后需重新标记并重新生成清理方案。')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('确定'));
+    await waitFor(() => {
+      expect(mockResetFolderMarks).toHaveBeenCalledWith('test-session');
+      // 页面标记状态清空（树上所有标记立即消失）
+      expect(mockSetMarks).toHaveBeenCalledWith({});
+    });
+  });
+
+  it('确认框点击取消不应调用重置接口', async () => {
+    await renderPage();
+    fireEvent.click(screen.getByText('重置所有标记'));
+    expect(await screen.findByText('确定要清除所有文件夹标记吗？清除后需重新标记并重新生成清理方案。')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('取消'));
+    await waitFor(() => {
+      expect(screen.queryByText('确定要清除所有文件夹标记吗？清除后需重新标记并重新生成清理方案。')).not.toBeInTheDocument();
+    });
+    expect(mockResetFolderMarks).not.toHaveBeenCalled();
   });
 });

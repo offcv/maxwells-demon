@@ -37,9 +37,16 @@ def set_folder_mark(id: str, req: MarkReq, db: Session = Depends(get_db)):
 @router.delete("/sessions/{id}/folders/mark")
 def delete_folder_mark(id: str, path: str, db: Session = Depends(get_db)):
     db.query(FolderMark).filter(FolderMark.session_id == id, FolderMark.path == path).delete()
-    
+
     db.commit()
     return {"message": "Success"}
+
+@router.delete("/sessions/{id}/folders/marks")
+def reset_folder_marks(id: str, db: Session = Depends(get_db)):
+    """重置所有标记：一键清除当前会话的全部文件夹标记（严格会话隔离，不影响其他扫描记录）"""
+    deleted = db.query(FolderMark).filter(FolderMark.session_id == id).delete()
+    db.commit()
+    return {"message": "Success", "deleted": deleted or 0}
 
 @router.get("/sessions/{id}/folders/marks")
 def get_marks(id: str, db: Session = Depends(get_db)):

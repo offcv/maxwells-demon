@@ -16,6 +16,7 @@ export const getFolderTree = (id: string, parent: string) => api.get(`/sessions/
 export const getFolderMarks = (id: string) => api.get(`/sessions/${id}/folders/marks`);
 export const setFolderMark = (id: string, path: string, mark: string) => api.put(`/sessions/${id}/folders/mark`, { path, mark });
 export const deleteFolderMark = (id: string, path: string) => api.delete(`/sessions/${id}/folders/mark?path=${encodeURIComponent(path)}`);
+export const resetFolderMarks = (id: string) => api.delete(`/sessions/${id}/folders/marks`);
 
 export const generateScheme = (id: string) => api.post(`/sessions/${id}/scheme/generate`);
 export const getSchemeStatus = (id: string) => api.get(`/sessions/${id}/scheme/status`);

@@ -2,8 +2,17 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useScanStore } from '../store/scanStore';
 import { useMarkStore } from '../store/markStore';
-import { getFolderTree, getFolderMarks, setFolderMark, deleteFolderMark } from '../api';
-import { ArrowLeft, Star, ChevronsDown, ChevronsUp, ChevronRight } from 'lucide-react';
+import { getFolderTree, getFolderMarks, setFolderMark, deleteFolderMark, resetFolderMarks } from '../api';
+import { ArrowLeft, Star, ChevronsDown, ChevronsUp, ChevronRight, RotateCcw } from 'lucide-react';
+import DialogModal from '../components/DialogModal';
+
+type DialogConfig = {
+  isOpen: boolean;
+  type: 'alert' | 'confirm';
+  title: string;
+  message: string;
+  onConfirm?: () => void;
+};
 
 // ---------- Helper: resolve inherited mark ----------
 function getResolvedMark(path: string, marks: Record<string, string>): { mark: string | null; isExplicit: boolean } {
@@ -202,6 +211,29 @@ export default function FolderMarking() {
   const [roots, setRoots] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [dialog, setDialog] = useState<DialogConfig>({ isOpen: false, type: 'alert', title: '', message: '' });
+
+  const closeDialog = () => setDialog(prev => ({ ...prev, isOpen: false }));
+
+  // 重置所有标记：确认后清除当前会话的全部文件夹标记（页面即时生效，无需刷新）
+  const handleResetMarks = () => {
+    setDialog({
+      isOpen: true,
+      type: 'confirm',
+      title: '重置所有标记',
+      message: '确定要清除所有文件夹标记吗？清除后需重新标记并重新生成清理方案。',
+      onConfirm: async () => {
+        closeDialog();
+        if (!sessionId) return;
+        try {
+          await resetFolderMarks(sessionId);
+          setMarks({});
+        } catch (e) {
+          console.error('重置标记失败', e);
+        }
+      }
+    });
+  };
 
   const loadData = useCallback(() => {
     if (!sessionId) return;
@@ -348,6 +380,25 @@ export default function FolderMarking() {
             flexShrink: 0
           }}>
             <span style={{ fontSize: 14, fontWeight: 600 }}>文件夹标记设置</span>
+            <button
+              onClick={handleResetMarks}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '4px 10px',
+                borderRadius: 6,
+                backgroundColor: '#F2F2F7',
+                border: '1px solid #D1D1D6',
+                color: '#FF3B30',
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: 'pointer'
+              }}
+            >
+              <RotateCcw size={12} />
+              重置所有标记
+            </button>
           </div>
 
           <div style={{ display: 'flex', gap: 16, paddingBottom: 8, alignItems: 'center' }}>
@@ -407,6 +458,15 @@ export default function FolderMarking() {
           </div>
         </div>
       </main>
+
+      <DialogModal
+        isOpen={dialog.isOpen}
+        onClose={closeDialog}
+        onConfirm={dialog.onConfirm}
+        title={dialog.title}
+        message={dialog.message}
+        type={dialog.type}
+      />
     </div>
   );
 }

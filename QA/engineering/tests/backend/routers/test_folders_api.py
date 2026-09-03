@@ -170,3 +170,48 @@ class TestFoldersAPI:
         resp = client.get("/api/folders/browse?path=/tmp/test%00null")
         # 应优雅处理，不崩溃
         assert resp.status_code < 500
+
+    # ── 重置所有标记（v1.2.2）──
+
+    def test_reset_marks(self, client, db_session, test_session):
+        """DELETE /api/sessions/{id}/folders/marks → 一键清除全部标记"""
+        db_session.add(FolderMark(session_id=test_session.id, path="/test/photos", mark="keep"))
+        db_session.add(FolderMark(session_id=test_session.id, path="/test/backup", mark="delete"))
+        db_session.commit()
+
+        resp = client.delete(f"/api/sessions/{test_session.id}/folders/marks")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["message"] == "Success"
+        assert data["deleted"] == 2
+
+        remaining = db_session.query(FolderMark).filter(
+            FolderMark.session_id == test_session.id
+        ).count()
+        assert remaining == 0
+
+    def test_reset_marks_session_isolation(self, client, db_session, test_session):
+        """重置仅作用于当前会话，不影响其他会话的标记"""
+        import uuid as _uuid
+        from app.models import ScanSession
+        other = ScanSession(
+            id=f"sess-other-{_uuid.uuid4().hex[:8]}",
+            scan_paths='[{"path": "/test", "is_exclude": false}]',
+            status="done",
+        )
+        db_session.add(other)
+        db_session.add(FolderMark(session_id=test_session.id, path="/test/photos", mark="keep"))
+        db_session.add(FolderMark(session_id=other.id, path="/test/photos", mark="delete"))
+        db_session.commit()
+
+        resp = client.delete(f"/api/sessions/{test_session.id}/folders/marks")
+        assert resp.status_code == 200
+
+        # 当前会话清空，其他会话保留
+        assert db_session.query(FolderMark).filter(
+            FolderMark.session_id == test_session.id
+        ).count() == 0
+        other_mark = db_session.query(FolderMark).filter(
+            FolderMark.session_id == other.id
+        ).first()
+        assert other_mark is not None and other_mark.mark == "delete"
