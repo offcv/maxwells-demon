@@ -8,6 +8,7 @@
 
 import os
 import stat
+import sys
 import uuid
 import time
 import pytest
@@ -119,6 +120,7 @@ class TestHashFunctions:
 class TestGetCreationTime:
     """跨平台文件创建时间获取"""
 
+    @pytest.mark.skipif(sys.platform != "darwin", reason="st_birthtime 属性仅 macOS 存在，Linux 上由其他用例覆盖兜底逻辑")
     def test_has_st_birthtime(self, tmp_fs):
         """有 st_birthtime 属性（macOS）时使用它"""
         path = os.path.join(tmp_fs, "test.txt")
