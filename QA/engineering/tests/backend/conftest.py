@@ -1,6 +1,3 @@
-import sys
-import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../engineering/backend')))
 """
 麦克斯韦妖 后端测试共享 fixtures
 
@@ -24,8 +21,14 @@ from typing import Generator, List, Dict
 from datetime import datetime
 
 # ── 确保 backend 包可导入 ──────────────────────────────────────────────
+# conftest 位于 <仓库根>/QA/engineering/tests/backend/conftest.py，
+# dirname 五层上溯（先去文件名，再过 backend/tests/engineering/QA）回到仓库根，
+# 再进入 engineering/backend。
+# （此前的实现层数不足，指向了不存在的 QA/engineering/backend，
+#   导致 CI 服务器上 import app 失败——本地则一直靠手动 PYTHONPATH 绕过。）
 BACKEND_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))),
+    "engineering",
     "backend",
 )
 sys.path.insert(0, BACKEND_DIR)
