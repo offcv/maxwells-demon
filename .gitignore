@@ -75,3 +75,9 @@ README_ENGINEERING.md
 # 屏蔽特定私有脚本和临时文件
 engineering/scripts/启动*Opencode.command
 search.py
+
+# ---- 以下内容仅本地保留，不上传公开仓库 ----
+QA/engineering/TEST_CASES_SPEC*.md
+QA/engineering/MANUAL_TESTING_CHECKLIST.md
+engineering/backend/start_backend.sh
+engineering/scripts/*.bat
